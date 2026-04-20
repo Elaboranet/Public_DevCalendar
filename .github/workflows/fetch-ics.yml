@@ -2,7 +2,7 @@ name: Fetch ICS Feed
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,6 +23,7 @@ jobs:
 
       - name: Download ICS
         run: |
+          echo "=== WORKFLOW VERSION: v2-retry-loop ==="
           curl -fsSL -o calendar.ics \
             "https://iwygengoglxqytnbnqgt.supabase.co/functions/v1/calendar-feed/7dc439831790444e873def93aeeb81a04a4e258877b1411fa96ea2bfb3f010ef.ics"
           [ -s calendar.ics ] || { echo "File ICS vuoto"; exit 1; }
@@ -30,6 +31,7 @@ jobs:
 
       - name: Commit and push if changed
         run: |
+          echo "=== STEP VERSION: v2-retry-loop ==="
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
@@ -39,8 +41,10 @@ jobs:
           fi
           
           for i in 1 2 3; do
+            echo "--- Tentativo $i ---"
             git add calendar.ics
             git commit -m "chore: update calendar.ics [skip ci]" || exit 0
+            git fetch origin main
             git pull --rebase origin main
             if git push origin main; then
               echo "Push riuscito al tentativo $i"
@@ -48,6 +52,7 @@ jobs:
             fi
             echo "Tentativo $i fallito, retry..."
             git reset --soft HEAD~1
+            sleep 2
           done
           
           echo "Push fallito dopo 3 tentativi"
