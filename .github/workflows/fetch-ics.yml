@@ -23,26 +23,28 @@ jobs:
 
       - name: Download ICS
         run: |
-          echo "=== WORKFLOW VERSION: v2-retry-loop ==="
+          echo "=== WORKFLOW VERSION: v3-handle-untracked ==="
           curl -fsSL -o calendar.ics \
             "https://iwygengoglxqytnbnqgt.supabase.co/functions/v1/calendar-feed/7dc439831790444e873def93aeeb81a04a4e258877b1411fa96ea2bfb3f010ef.ics"
           [ -s calendar.ics ] || { echo "File ICS vuoto"; exit 1; }
           echo "Scaricate $(wc -l < calendar.ics) righe"
+          ls -la calendar.ics
 
       - name: Commit and push if changed
         run: |
-          echo "=== STEP VERSION: v2-retry-loop ==="
+          echo "=== STEP VERSION: v3-handle-untracked ==="
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          if git diff --quiet calendar.ics; then
-            echo "Nessuna modifica, skip."
+          git add calendar.ics
+          
+          if git diff --cached --quiet; then
+            echo "Nessuna modifica da committare, skip."
             exit 0
           fi
           
           for i in 1 2 3; do
             echo "--- Tentativo $i ---"
-            git add calendar.ics
             git commit -m "chore: update calendar.ics [skip ci]" || exit 0
             git fetch origin main
             git pull --rebase origin main
@@ -52,6 +54,7 @@ jobs:
             fi
             echo "Tentativo $i fallito, retry..."
             git reset --soft HEAD~1
+            git add calendar.ics
             sleep 2
           done
           
