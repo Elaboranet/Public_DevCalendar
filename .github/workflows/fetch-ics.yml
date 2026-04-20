@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fetch-ics
+  cancel-in-progress: false
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -19,20 +23,32 @@ jobs:
 
       - name: Download ICS
         run: |
-          curl -L -o calendar.ics "https://iwygengoglxqytnbnqgt.supabase.co/functions/v1/calendar-feed/7dc439831790444e873def93aeeb81a04a4e258877b1411fa96ea2bfb3f010ef.ics"
+          curl -fsSL -o calendar.ics \
+            "https://iwygengoglxqytnbnqgt.supabase.co/functions/v1/calendar-feed/7dc439831790444e873def93aeeb81a04a4e258877b1411fa96ea2bfb3f010ef.ics"
+          [ -s calendar.ics ] || { echo "File ICS vuoto"; exit 1; }
+          echo "Scaricate $(wc -l < calendar.ics) righe"
 
       - name: Commit and push if changed
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add calendar.ics
-          if git diff --cached --quiet; then
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          if git diff --quiet calendar.ics; then
             echo "Nessuna modifica, skip."
             exit 0
           fi
-          git stash
-          git pull --rebase origin main
-          git stash pop
-          git add calendar.ics
-          git commit -m "Update calendar.ics"
-          git push origin main
+          
+          for i in 1 2 3; do
+            git add calendar.ics
+            git commit -m "chore: update calendar.ics [skip ci]" || exit 0
+            git pull --rebase origin main
+            if git push origin main; then
+              echo "Push riuscito al tentativo $i"
+              exit 0
+            fi
+            echo "Tentativo $i fallito, retry..."
+            git reset --soft HEAD~1
+          done
+          
+          echo "Push fallito dopo 3 tentativi"
+          exit 1
