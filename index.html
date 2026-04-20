@@ -8,9 +8,41 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #1a1a1a; }
 
-  header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
   header h1 { font-size: 20px; font-weight: 600; }
   #cal-title { font-size: 13px; color: #666; margin-top: 2px; }
+
+  .header-left { display: flex; flex-direction: column; }
+  .last-updated {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 4px 10px;
+    background: #eef6ee;
+    border: 1px solid #cfe6cf;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #2d6a2d;
+    width: fit-content;
+    transition: background 0.2s, color 0.2s, border-color 0.2s;
+  }
+  .last-updated.stale { background: #fff5e6; border-color: #ffd79a; color: #a25a00; }
+  .last-updated.error { background: #fdecec; border-color: #f5bcbc; color: #a02020; }
+  .last-updated .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #2d8a2d;
+    box-shadow: 0 0 0 0 rgba(45,138,45,0.6);
+    animation: pulse 2s infinite;
+  }
+  .last-updated.stale .dot { background: #d68a00; animation: none; }
+  .last-updated.error .dot { background: #a02020; animation: none; }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(45,138,45,0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(45,138,45,0); }
+    100% { box-shadow: 0 0 0 0 rgba(45,138,45,0); }
+  }
 
   .nav { display: flex; align-items: center; gap: 12px; }
   .nav button { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; transition: background 0.15s; }
@@ -72,9 +104,13 @@
 <body>
 
 <header>
-  <div>
+  <div class="header-left">
     <h1>Calendario</h1>
     <div id="cal-title">Caricamento...</div>
+    <div id="last-updated" class="last-updated" title="">
+      <span class="dot"></span>
+      <span id="last-updated-text">Loading…</span>
+    </div>
   </div>
   <div class="nav">
     <button onclick="changeMonth(-1)">&#8592;</button>
@@ -102,7 +138,8 @@
 </div>
 
 <script>
-const LOCAL_ICS = './calendar.ics';
+// Cache-busting: aggiunge timestamp per evitare che Teams / browser servano versione vecchia
+const LOCAL_ICS = './calendar.ics?t=' + Date.now();
 
 const COLORS = ['#4F8EF7','#43C59E','#F7874F','#A06CF7','#F74F6E','#F7C44F','#4FC5F7','#7BC67A'];
 const DAYS_IT = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
@@ -112,6 +149,7 @@ let allEvents = [];
 let currentView = 'month';
 let currentDate = new Date();
 currentDate.setDate(1);
+let lastUpdatedDate = null;
 
 function parseICS(text) {
   const events = [];
@@ -151,10 +189,55 @@ function parseICS(text) {
   return { events, calName };
 }
 
+// Formatta un tempo relativo in inglese, dato un Date di riferimento
+function formatRelativeEN(date) {
+  if (!date) return 'Update time unknown';
+  const now = new Date();
+  const diffSec = Math.round((now - date) / 1000);
+  if (diffSec < 0) return 'Just updated';
+  if (diffSec < 45) return 'Just now';
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? '' : 's'} ago`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `${diffH} hour${diffH === 1 ? '' : 's'} ago`;
+  const diffD = Math.round(diffH / 24);
+  if (diffD < 30) return `${diffD} day${diffD === 1 ? '' : 's'} ago`;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Aggiorna il badge "Last updated" e il suo stato (fresh / stale / error)
+function refreshLastUpdatedBadge() {
+  const badge = document.getElementById('last-updated');
+  const text = document.getElementById('last-updated-text');
+  if (!lastUpdatedDate) {
+    badge.classList.remove('stale');
+    badge.classList.add('error');
+    text.textContent = 'Update time unknown';
+    badge.title = '';
+    return;
+  }
+  const ageMin = (new Date() - lastUpdatedDate) / 60000;
+  badge.classList.remove('error');
+  // Oltre 1 ora = "stale" (arancione). Il workflow gira ogni 10 min, quindi 1h è abbondante.
+  if (ageMin > 60) badge.classList.add('stale');
+  else badge.classList.remove('stale');
+
+  text.textContent = 'Last updated: ' + formatRelativeEN(lastUpdatedDate);
+  badge.title = lastUpdatedDate.toLocaleString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  });
+}
+
 async function loadFeed() {
   try {
     const res = await fetch(LOCAL_ICS);
     if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    // Data di ultima modifica del file calendar.ics sul server
+    const lm = res.headers.get('Last-Modified');
+    lastUpdatedDate = lm ? new Date(lm) : null;
+
     const text = await res.text();
     const { events, calName } = parseICS(text);
     allEvents = events.filter(e => e.start);
@@ -162,6 +245,8 @@ async function loadFeed() {
     allEvents.forEach((e,i) => e.color = COLORS[i % COLORS.length]);
     document.getElementById('cal-title').textContent = calName || 'Feed ICS';
     document.getElementById('loading').style.display = 'none';
+
+    refreshLastUpdatedBadge();
     render();
   } catch(err) {
     document.getElementById('loading').style.display = 'none';
@@ -171,6 +256,11 @@ async function loadFeed() {
       Il file calendar.ics non è ancora stato generato.<br>
       Vai su GitHub → Actions → "Fetch ICS Feed" → "Run workflow".<br>
       <small>Errore: ${err.message}</small>`;
+
+    const badge = document.getElementById('last-updated');
+    badge.classList.remove('stale');
+    badge.classList.add('error');
+    document.getElementById('last-updated-text').textContent = 'Load failed';
   }
 }
 
@@ -302,6 +392,13 @@ function setView(v, btn) {
   btn.classList.add('active');
   render();
 }
+
+// Refresh del badge ogni 60s (il testo diventa "X minutes ago", deve aggiornarsi da solo)
+setInterval(refreshLastUpdatedBadge, 60000);
+
+// Ricarica il feed ogni 5 minuti, così l'utente che tiene la tab aperta
+// vede gli aggiornamenti senza dover ricaricare la pagina
+setInterval(loadFeed, 5 * 60 * 1000);
 
 loadFeed();
 </script>
