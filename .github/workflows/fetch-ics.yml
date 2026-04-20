@@ -1,0 +1,24 @@
+name: Fetch ICS Feed
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # ogni ora
+  workflow_dispatch:       # eseguibile manualmente
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ICS
+        run: |
+          curl -L -o calendar.ics "https://iwygengoglxqytnbnqgt.supabase.co/functions/v1/calendar-feed/7dc439831790444e873def93aeeb81a04a4e258877b1411fa96ea2bfb3f010ef.ics"
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add calendar.ics
+          git diff --cached --quiet || git commit -m "Update calendar.ics"
+          git push
