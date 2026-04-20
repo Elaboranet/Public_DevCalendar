@@ -407,9 +407,23 @@ function getInitials(person) {
    ITALIAN HOLIDAYS
    ============================================================ */
 function getItalianHolidays(year) {
-  const set = new Set();
-  const fixed = ['01-01','01-06','04-25','05-01','06-02','08-15','11-01','12-08','12-25','12-26'];
-  fixed.forEach(md => set.add(year + '-' + md));
+  const map = new Map();
+  const fixed = [
+    ['01-01', "New Year's Day"],
+    ['01-06', 'Epiphany'],
+    ['04-25', 'Liberation Day'],
+    ['05-01', 'Labour Day'],
+    ['06-02', 'Republic Day'],
+    ['06-17', 'Saint Ranieri — Pisa patron'],
+    ['08-15', 'Assumption Day'],
+    ['11-01', "All Saints' Day"],
+    ['12-08', 'Immaculate Conception'],
+    ['12-25', 'Christmas Day'],
+    ['12-26', "Saint Stephen's Day"]
+  ];
+  fixed.forEach(([md, name]) => map.set(year + '-' + md, name));
+
+  // Easter and Easter Monday (Gauss algorithm)
   const a = year % 19;
   const b = Math.floor(year / 100);
   const c = year % 100;
@@ -426,9 +440,9 @@ function getItalianHolidays(year) {
   const day = ((h + l - 7 * m + 114) % 31) + 1;
   const easter = new Date(year, month - 1, day);
   const easterMonday = new Date(easter); easterMonday.setDate(easter.getDate() + 1);
-  set.add(toISODate(easter));
-  set.add(toISODate(easterMonday));
-  return set;
+  map.set(toISODate(easter), 'Easter');
+  map.set(toISODate(easterMonday), 'Easter Monday');
+  return map;
 }
 
 function toISODate(d) {
@@ -583,7 +597,8 @@ function renderMonth() {
     const iso = toISODate(cellDate);
     const dow = cellDate.getDay();
     const isWeekend = dow === 0 || dow === 6;
-    const isHoliday = holidays.has(iso);
+    const holidayName = holidays.get(iso);
+    const isHoliday = !!holidayName;
     const isToday = sameDay(cellDate, today);
     const evs = eventsForDay(cellDate);
 
@@ -592,7 +607,8 @@ function renderMonth() {
     if (isHoliday) classes.push('holiday');
     if (isToday) classes.push('today');
 
-    html += '<div class="' + classes.join(' ') + '" onclick="openDayModal(\'' + iso + '\')">';
+    const cellTitle = isHoliday ? ' title="' + escapeHtml(holidayName) + '"' : '';
+    html += '<div class="' + classes.join(' ') + '"' + cellTitle + ' onclick="openDayModal(\'' + iso + '\')">';
     html += '<div class="day-num">' + d + '</div>';
     const maxShow = window.innerWidth < 600 ? 2 : 3;
     const shown = evs.slice(0, maxShow);
@@ -639,7 +655,8 @@ function renderAgenda() {
   let html = '<div class="agenda">';
   daysWithEvents.forEach(({ date, events }) => {
     const iso = toISODate(date);
-    const isHoliday = holidays.has(iso);
+    const holidayName = holidays.get(iso);
+    const isHoliday = !!holidayName;
     const isToday = sameDay(date, today);
     const dayLabel = date.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -647,7 +664,7 @@ function renderAgenda() {
     html += '<div class="agenda-day-header' + (isHoliday ? ' is-holiday' : '') + '" onclick="openDayModal(\'' + iso + '\')">';
     html += '<span>' + dayLabel + '</span>';
     if (isToday) html += '<span class="agenda-chip today">Today</span>';
-    if (isHoliday) html += '<span class="agenda-chip holiday">Holiday</span>';
+    if (isHoliday) html += '<span class="agenda-chip holiday" title="' + escapeHtml(holidayName) + '">' + escapeHtml(holidayName) + '</span>';
     html += '</div>';
     html += '<div class="agenda-entries">';
     events.forEach(ev => {
@@ -673,10 +690,19 @@ window.openDayModal = function(iso) {
   const date = new Date(yy, mm - 1, dd);
   const evs = eventsForDay(date);
   const dayLabel = date.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const holidayName = getItalianHolidays(yy).get(iso);
+
   document.getElementById('modal-title').textContent = dayLabel;
-  document.getElementById('modal-sub').textContent = evs.length === 0
+
+  let subHtml = '';
+  if (holidayName) {
+    subHtml += '<span class="agenda-chip holiday" style="margin-right:8px;">' + escapeHtml(holidayName) + '</span>';
+  }
+  subHtml += evs.length === 0
     ? 'No entries on this day'
     : (evs.length === 1 ? '1 entry' : evs.length + ' entries');
+  document.getElementById('modal-sub').innerHTML = subHtml;
+
   document.getElementById('modal-body').innerHTML = evs.map(renderModalEntry).join('');
   document.getElementById('modal-overlay').style.display = 'flex';
 };
