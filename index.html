@@ -403,6 +403,18 @@ function getInitials(person) {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
+// Short form: "M.Nencioli" — initial of first name + full last name.
+// Handles double-name last names (e.g. "Di Prima" → "A.Di Prima") by treating
+// everything after the first word as surname.
+function formatShortName(person) {
+  if (!person) return '?';
+  const words = normalizeSpaces(person).split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0];
+  const firstInitial = words[0][0].toUpperCase();
+  const lastName = words.slice(1).join(' ');
+  return firstInitial + '.' + lastName;
+}
+
 /* ============================================================
    ITALIAN HOLIDAYS
    ============================================================ */
@@ -614,8 +626,8 @@ function renderMonth() {
     const shown = evs.slice(0, maxShow);
     shown.forEach(ev => {
       const cfg = getTypeConfig(ev.type);
-      const initials = getInitials(ev.person);
-      const label = cfg.short + ' ' + initials;
+      const shortName = formatShortName(ev.person);
+      const label = cfg.short + ' ' + shortName;
       const style = 'background:var(--t-' + cfg.cssPrefix + '-bg);color:var(--t-' + cfg.cssPrefix + '-text);';
       html += '<span class="pill" style="' + style + '" title="' + escapeHtml(ev.person + ' — ' + cfg.label) + '">' + escapeHtml(label) + '</span>';
     });
