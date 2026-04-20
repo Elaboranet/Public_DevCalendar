@@ -102,13 +102,7 @@
 </div>
 
 <script>
-const FEED_URL = 'https://iwygengoglxqytnbnqgt.supabase.co/functions/v1/calendar-feed/7dc439831790444e873def93aeeb81a04a4e258877b1411fa96ea2bfb3f010ef.ics';
-const PROXIES = [
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://thingproxy.freeboard.io/fetch/${url}`,
-  url => `https://cors-anywhere.herokuapp.com/${url}`,
-];
+const LOCAL_ICS = './calendar.ics';
 
 const COLORS = ['#4F8EF7','#43C59E','#F7874F','#A06CF7','#F74F6E','#F7C44F','#4FC5F7','#7BC67A'];
 const DAYS_IT = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
@@ -157,24 +151,11 @@ function parseICS(text) {
   return { events, calName };
 }
 
-async function tryFetch(url) {
-  for (let i = 0; i < PROXIES.length; i++) {
-    try {
-      document.getElementById('loading').textContent = `Tentativo ${i+1}/${PROXIES.length}...`;
-      const res = await fetch(PROXIES[i](url), { signal: AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const text = await res.text();
-      if (text.includes('VCALENDAR')) return text;
-      throw new Error('Risposta non valida');
-    } catch(e) {
-      if (i === PROXIES.length - 1) throw e;
-    }
-  }
-}
-
 async function loadFeed() {
   try {
-    const text = await tryFetch(FEED_URL);
+    const res = await fetch(LOCAL_ICS);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
     const { events, calName } = parseICS(text);
     allEvents = events.filter(e => e.start);
     allEvents.sort((a,b) => a.start - b.start);
@@ -187,8 +168,8 @@ async function loadFeed() {
     const el = document.getElementById('error');
     el.style.display = 'block';
     el.innerHTML = `<strong>Impossibile caricare il calendario.</strong><br>
-      Tutti i proxy hanno fallito. Prova ad aprire direttamente il feed nel browser:<br>
-      <a href="${FEED_URL}" target="_blank" style="color:#c0392b;font-size:12px;word-break:break-all">${FEED_URL}</a><br><br>
+      Il file calendar.ics non è ancora stato generato.<br>
+      Vai su GitHub → Actions → "Fetch ICS Feed" → "Run workflow".<br>
       <small>Errore: ${err.message}</small>`;
   }
 }
